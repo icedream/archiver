@@ -5,16 +5,15 @@ import (
 	"os"
 )
 
-func mimeType(src string) (string, error) {
-	fd, err := os.Open(src)
+func mimeType(fd *os.File) (string, error) {
+	data := make([]byte, 512)
+
+	_, err := fd.Read(data)
 	if err != nil {
 		return "", err
 	}
-	defer fd.Close()
 
-	data := make([]byte, 512)
-
-	_, err = fd.Read(data)
+	_, err = fd.Seek(0, 0)
 	if err != nil {
 		return "", err
 	}

@@ -2,6 +2,8 @@ package extractor
 
 import (
 	"fmt"
+	"io"
+	"os"
 )
 
 type detectableExtractor struct{}
@@ -10,7 +12,7 @@ func NewDetectable() Extractor {
 	return &detectableExtractor{}
 }
 
-func (e *detectableExtractor) Extract(src, dest string) error {
+func (e *detectableExtractor) Extract(src *os.File, dest io.Writer) error {
 	srcType, err := mimeType(src)
 	if err != nil {
 		return err
@@ -28,7 +30,7 @@ func (e *detectableExtractor) Extract(src, dest string) error {
 			return err
 		}
 	default:
-		return fmt.Errorf("%s is an unsupported archive type: %s", src, srcType)
+		return fmt.Errorf("unsupported archive type: %s", srcType)
 	}
 
 	return nil

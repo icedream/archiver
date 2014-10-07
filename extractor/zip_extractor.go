@@ -1,12 +1,10 @@
 package extractor
 
 import (
+	"archive/tar"
 	"archive/zip"
-	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 )
 
 type zipExtractor struct{}
@@ -15,91 +13,57 @@ func NewZip() Extractor {
 	return &zipExtractor{}
 }
 
-func (e *zipExtractor) Extract(src, dest string) error {
-	srcType, err := mimeType(src)
+func (e *zipExtractor) Extract(zipFile *os.File, tarDest io.Writer) error {
+	zipReader, err := zip.OpenReader(zipFile.Name())
 	if err != nil {
 		return err
 	}
 
-	switch srcType {
-	case "application/zip":
-		err := extractZip(src, dest)
+	defer zipReader.Close()
+
+	tarWriter := tar.NewWriter(tarDest)
+
+	for _, zipEntry := range zipReader.File {
+		err := writeZipEntryToTar(tarWriter, zipEntry)
 		if err != nil {
 			return err
 		}
-	default:
-		return fmt.Errorf("%s is not a zip archive: %s", src, srcType)
 	}
 
 	return nil
 }
 
-func extractZip(src, dest string) error {
-	path, err := exec.LookPath("unzip")
+func writeZipEntryToTar(tarWriter *tar.Writer, zipEntry *zip.File) error {
+	zipInfo := zipEntry.FileInfo()
 
-	if err == nil {
-		err := os.MkdirAll(dest, 0755)
-		if err != nil {
-			return err
-		}
-
-		unzipCmd := exec.Command(path, src)
-		unzipCmd.Dir = dest
-
-		return unzipCmd.Run()
-	} else {
-		files, err := zip.OpenReader(src)
-		if err != nil {
-			return err
-		}
-
-		defer files.Close()
-
-		for _, file := range files.File {
-			err = func() error {
-				readCloser, err := file.Open()
-				if err != nil {
-					return err
-				}
-				defer readCloser.Close()
-
-				return extractZipArchiveFile(file, dest, readCloser)
-			}()
-
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
+	tarHeader, err := tar.FileInfoHeader(zipInfo, "")
+	if err != nil {
+		return err
 	}
-}
 
-func extractZipArchiveFile(file *zip.File, dest string, input io.Reader) error {
-	filePath := filepath.Join(dest, file.Name)
-	fileInfo := file.FileInfo()
+	// file info only populates the base name; we want the full path
+	tarHeader.Name = zipEntry.FileHeader.Name
 
-	if fileInfo.IsDir() {
-		err := os.MkdirAll(filePath, fileInfo.Mode())
-		if err != nil {
-			return err
-		}
-	} else {
-		err := os.MkdirAll(filepath.Dir(filePath), 0755)
-		if err != nil {
-			return err
-		}
+	zipReader, err := zipEntry.Open()
+	if err != nil {
+		return err
+	}
 
-		fileCopy, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, fileInfo.Mode())
-		if err != nil {
-			return err
-		}
-		defer fileCopy.Close()
+	defer zipReader.Close()
 
-		_, err = io.Copy(fileCopy, input)
-		if err != nil {
-			return err
-		}
+	err = tarWriter.WriteHeader(tarHeader)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(tarWriter, zipReader)
+	if err != nil {
+		return err
+	}
+
+	err = tarWriter.Flush()
+	if err != nil {
+		return err
 	}
 
 	return nil

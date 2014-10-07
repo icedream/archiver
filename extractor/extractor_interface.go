@@ -1,5 +1,10 @@
 package extractor
 
+import (
+	"io"
+	"os"
+)
+
 type Extractor interface {
-	Extract(src, dest string) error
+	Extract(file *os.File, tarDest io.Writer) error
 }
