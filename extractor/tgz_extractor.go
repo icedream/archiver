@@ -77,6 +77,10 @@ func extractTarArchive(tarReader *tar.Reader, dest string) error {
 }
 
 func extractTarArchiveFile(header *tar.Header, dest string, input io.Reader) error {
+	if header.Typeflag == tar.TypeXGlobalHeader {
+		return nil
+	}
+
 	filePath, err := securejoin.SecureJoin(dest, header.Name)
 
 	if err != nil {
